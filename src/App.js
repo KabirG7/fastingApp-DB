@@ -7,6 +7,18 @@ function App() {
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
   const [authError, setAuthError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const [currentMonth, setCurrentMonth] = useState('');
+
+  useEffect(() => {
+    const today = new Date();
+    const monthIndex = today.getMonth(); // 0-indexed month
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    setCurrentMonth(monthNames[monthIndex]);
+  }, []);
   
   // Current view: 'auth', 'dashboard', 'timer', 'history'
   const [currentView, setCurrentView] = useState('auth');
@@ -16,6 +28,9 @@ function App() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [fastingHistory, setFastingHistory] = useState([]);
   const [fastingStats, setFastingStats] = useState(null);
+
+  // History view state
+  const [selectedDay, setSelectedDay] = useState(null);
 
   // Auth form states
   const [authForm, setAuthForm] = useState({
@@ -64,13 +79,72 @@ function App() {
     }
   ];
 
+  // Helper function to get weekly history data
+  const getWeeklyHistory = () => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - currentDay);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Generate array of weeks (last 8 weeks including current week)
+    const weeks = [];
+    for (let weekIndex = 7; weekIndex >= 0; weekIndex--) {
+      const weekStart = new Date(startOfWeek);
+      weekStart.setDate(startOfWeek.getDate() - (weekIndex * 7));
+      
+      const weekData = {
+        weekStart,
+        days: []
+      };
+
+      // Generate 7 days for this week
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+        const currentDate = new Date(weekStart);
+        currentDate.setDate(weekStart.getDate() + dayIndex);
+        
+        // Find fasting sessions for this day
+        const dayFasts = fastingHistory.filter(session => {
+          const sessionDate = new Date(session.startTime);
+          return sessionDate.toDateString() === currentDate.toDateString();
+        });
+
+        // Determine day status
+        let status = 'empty';
+        let primaryFast = null;
+        
+        if (dayFasts.length > 0) {
+          // Find the most recent fast for this day
+          primaryFast = dayFasts.reduce((latest, current) => {
+            return new Date(current.startTime) > new Date(latest.startTime) ? current : latest;
+          });
+          
+          status = primaryFast.status === 'completed' ? 'completed' : 
+                   primaryFast.status === 'cancelled' ? 'cancelled' : 'active';
+        }
+
+        weekData.days.push({
+          date: new Date(currentDate),
+          fasts: dayFasts,
+          status,
+          primaryFast,
+          dayName: currentDate.toLocaleDateString('en', { weekday: 'short' }),
+          dayNumber: currentDate.getDate()
+        });
+      }
+
+      weeks.push(weekData);
+    }
+
+    return weeks;
+  };
+
   // Check for existing token on component mount
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
     if (savedToken) {
       setToken(savedToken);
       setCurrentView('dashboard');
-      // Don't fetch data here, let the token useEffect handle it
     } else {
       setCurrentView('auth');
     }
@@ -108,7 +182,6 @@ function App() {
       ...options
     };
 
-    // Use the current token state
     const currentToken = token || localStorage.getItem('token');
     if (currentToken) {
       config.headers.Authorization = `Bearer ${currentToken}`;
@@ -151,15 +224,10 @@ function App() {
 
       console.log('Auth successful:', data);
       
-      // Set token and user data
       setToken(data.token);
       setUser(data.user);
       localStorage.setItem('token', data.token);
-      
-      // Clear form
       setAuthForm({ username: '', email: '', password: '' });
-      
-      // View will be set by the useEffect that watches token changes
       
     } catch (error) {
       console.error('Auth error:', error);
@@ -177,6 +245,7 @@ function App() {
     setFastingHistory([]);
     setFastingStats(null);
     setElapsedTime(0);
+    setSelectedDay(null);
     localStorage.removeItem('token');
     setCurrentView('auth');
   };
@@ -189,7 +258,6 @@ function App() {
       setActiveFast(fast);
     } catch (error) {
       console.error('Error fetching active fast:', error);
-      // Don't show error to user for this - it's normal to not have an active fast
       if (error.message.includes('No active fasting session')) {
         setActiveFast(null);
       }
@@ -215,7 +283,6 @@ function App() {
       setFastingStats(stats);
     } catch (error) {
       console.error('Error fetching stats:', error);
-      // Set default stats if fetch fails
       setFastingStats({
         completedSessions: 0,
         completionRate: 0,
@@ -400,7 +467,6 @@ function App() {
         
         <div className="container">
           <div className="glass-panel">
-      {/*  <span className="username"> Hi {user?.username || 'User'}</span> */}
             <div className="header">
               <h1 className="title">Intermittent Fasting Tracker</h1>
               <div className="user-info">
@@ -556,11 +622,13 @@ function App() {
     );
   }
 
-  // History Screen
+  // History Screen - New Weekly Square Design
   if (currentView === 'history') {
     if (fastingHistory.length === 0) {
       fetchFastingHistory();
     }
+
+    const weeklyData = getWeeklyHistory();
 
     return (
       <div className="app">
@@ -569,7 +637,7 @@ function App() {
         <div className="container">
           <div className="glass-panel">
             <div className="header">
-              <h1 className="title">Fasting History</h1>
+              <h1 className="title">{currentMonth} Fasting History</h1>
               <div className="user-info">
                 <button onClick={() => setCurrentView('dashboard')} className="nav-button">
                   Dashboard
@@ -580,28 +648,94 @@ function App() {
               </div>
             </div>
             
-            <div className="history-container">
+            <div className={`history-container ${selectedDay ? 'details-open' : ''}`}>
               {fastingHistory.length === 0 ? (
                 <div className="empty-state">
                   <p>No fasting sessions yet. Start your first fast!</p>
                 </div>
               ) : (
-                <div className="history-list">
-                  {fastingHistory.map((session) => (
-                    <div key={session._id} className="history-item">
-                      <div className="session-info">
-                        <div className="session-protocol">{session.protocol}</div>
-                        <div className="session-duration">{session.durationHours} hours</div>
-                        <div className={`session-status ${session.status}`}>{session.status}</div>
-                      </div>
-                      <div className="session-time">
-                        <div>Started: {new Date(session.startTime).toLocaleString()}</div>
-                        {session.endTime && (
-                          <div>Ended: {new Date(session.endTime).toLocaleString()}</div>
-                        )}
-                      </div>
+                <div className="weekly-history">
+                  <div className="week-labels">
+                    <div className="week-label-item">Sun</div>
+                    <div className="week-label-item">Mon</div>
+                    <div className="week-label-item">Tue</div>
+                    <div className="week-label-item">Wed</div>
+                    <div className="week-label-item">Thu</div>
+                    <div className="week-label-item">Fri</div>
+                    <div className="week-label-item">Sat</div>
+                  </div>
+                  
+                  {weeklyData.map((week, weekIndex) => (
+                    <div key={weekIndex} className="week-row">
+                      {week.days.map((day, dayIndex) => (
+                        <div 
+                          key={dayIndex}
+                          className={`day-square ${day.status}`}
+                          onClick={() => {
+                            if (day.fasts.length > 0) {
+                              setSelectedDay(selectedDay?.date?.toDateString() === day.date.toDateString() ? null : day);
+                            }
+                          }}
+                          title={`${day.date.toLocaleDateString()} - ${day.fasts.length} fasts`}
+                        >
+                          <div className="day-number">{day.dayNumber}</div>
+                          {day.fasts.length > 0 && (
+                            <div className="fast-indicator">
+                              {day.primaryFast?.protocol || day.fasts[0].protocol}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Expanded Day Details */}
+              {selectedDay && (
+                <div className={`day-details ${selectedDay ? 'visible' : ''}`}>
+                  <div className="day-details-header">
+                    <h3>{selectedDay.date.toLocaleDateString('en', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}</h3>
+                    <button 
+                      className="close-details"
+                      onClick={() => setSelectedDay(null)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  
+                  <div className="day-details-content">
+                    {selectedDay.fasts.map((fast) => (
+                      <div key={fast._id} className="fast-detail-card">
+                        <div className="fast-detail-header">
+                          <span className="protocol">{fast.protocol}</span>
+                          <span className={`status ${fast.status}`}>{fast.status}</span>
+                        </div>
+                        
+                        <div className="fast-detail-info">
+                          <div className="info-row">
+                            <span>Duration:</span>
+                            <span>{fast.durationHours} hours</span>
+                          </div>
+                          <div className="info-row">
+                            <span>Started:</span>
+                            <span>{new Date(fast.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          </div>
+                          {fast.endTime && (
+                            <div className="info-row">
+                              <span>Ended:</span>
+                              <span>{new Date(fast.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
