@@ -9,7 +9,12 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = 'your-secret-key-change-this-in-production';
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://fasting-app-db.vercel.app' 
+    : 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
 
 // MongoDB Atlas connection
