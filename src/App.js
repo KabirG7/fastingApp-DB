@@ -188,7 +188,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3001/api${endpoint}`, config);
+      const response = await fetch(`/api${endpoint}`, config);
       const data = await response.json();
 
       if (!response.ok) {
@@ -717,7 +717,7 @@ function App() {
                           <span className={`status ${fast.status}`}>{fast.status}</span>
                         </div>
                         
-                        <div className="fast-detail-info">
+                        <div className="fast-detail-info">  
                           <div className="info-row">
                             <span>Duration:</span>
                             <span>{fast.durationHours} hours</span>

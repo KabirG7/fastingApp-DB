@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const JWT_SECRET = 'your-secret-key-change-this-in-production';
 
 // Middleware
@@ -365,6 +365,4 @@ app.get('/api/fasting/stats', authenticateToken, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Fasting Tracker Server running on http://localhost:${PORT}`);
-});
+module.exports = app;
