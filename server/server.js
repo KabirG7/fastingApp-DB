@@ -9,12 +9,7 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = 'your-secret-key-change-this-in-production';
 
 // Middleware
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'https://fasting-app-db.vercel.app' 
-    : 'http://localhost:3000',
-  credentials: true
-}));
+app.use(cors());
 app.use(express.json());
 
 // MongoDB Atlas connection
@@ -370,4 +365,6 @@ app.get('/api/fasting/stats', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = app;
+app.listen(PORT, () => {
+  console.log(`Fasting Tracker Server running on http://localhost:${PORT}`);
+});
