@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 
 function App() {
@@ -139,44 +139,7 @@ function App() {
     return weeks;
   };
 
-  // Check for existing token on component mount
-  useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    if (savedToken) {
-      setToken(savedToken);
-      setCurrentView('dashboard');
-    } else {
-      setCurrentView('auth');
-    }
-  }, []);
-
-  // Handle token changes and fetch data when token is available
-  useEffect(() => {
-    if (token) {
-      setCurrentView('dashboard');
-      fetchActiveFast();
-      fetchFastingStats();
-    } else {
-      setCurrentView('auth');
-    }
-  }, [token]);
-
-  // Timer effect for active fasting
-  useEffect(() => {
-    let interval;
-    if (activeFast && activeFast.status === 'active') {
-      setCurrentView('timer');
-      interval = setInterval(() => {
-        const startTime = new Date(activeFast.startTime);
-        const now = new Date();
-        const elapsed = Math.floor((now - startTime) / 1000);
-        setElapsedTime(elapsed);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [activeFast]);
-
-  const apiCall = async (endpoint, options = {}) => {
+  const apiCall = useCallback(async (endpoint, options = {}) => {
     const config = {
       headers: { 'Content-Type': 'application/json' },
       ...options
@@ -204,6 +167,97 @@ function App() {
       console.error(`API call failed for ${endpoint}:`, error);
       throw error;
     }
+  }, [token]);
+
+  const fetchActiveFast = useCallback(async () => {
+    try {
+      console.log('Fetching active fast...');
+      const fast = await apiCall('/fasting/active');
+      console.log('Active fast response:', fast);
+      setActiveFast(fast);
+    } catch (error) {
+      console.error('Error fetching active fast:', error);
+      if (error.message.includes('No active fasting session')) {
+        setActiveFast(null);
+      }
+    }
+  }, [apiCall]);
+
+  const fetchFastingHistory = useCallback(async () => {
+    try {
+      console.log('Fetching fasting history...');
+      const history = await apiCall('/fasting/history');
+      console.log('History response:', history);
+      setFastingHistory(history);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    }
+  }, [apiCall]);
+
+  const fetchFastingStats = useCallback(async () => {
+    try {
+      console.log('Fetching fasting stats...');
+      const stats = await apiCall('/fasting/stats');
+      console.log('Stats response:', stats);
+      setFastingStats(stats);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      setFastingStats({
+        completedSessions: 0,
+        completionRate: 0,
+        totalHoursFasted: 0
+      });
+    }
+  }, [apiCall]);
+
+  // Check for existing token on component mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem('token');
+    if (savedToken) {
+      setToken(savedToken);
+      setCurrentView('dashboard');
+    } else {
+      setCurrentView('auth');
+    }
+  }, []);
+
+  // Handle token changes and fetch data when token is available
+  useEffect(() => {
+    if (token) {
+      setCurrentView('dashboard');
+      fetchActiveFast();
+      fetchFastingStats();
+    } else {
+      setCurrentView('auth');
+    }
+  }, [token, fetchActiveFast, fetchFastingStats]);
+
+  // Timer effect for active fasting
+  useEffect(() => {
+    let interval;
+    if (activeFast && activeFast.status === 'active') {
+      setCurrentView('timer');
+      interval = setInterval(() => {
+        const startTime = new Date(activeFast.startTime);
+        const now = new Date();
+        const elapsed = Math.floor((now - startTime) / 1000);
+        setElapsedTime(elapsed);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [activeFast]);
+
+  const handleLogout = () => {
+    console.log('Logging out...');
+    setToken(null);
+    setUser(null);
+    setActiveFast(null);
+    setFastingHistory([]);
+    setFastingStats(null);
+    setElapsedTime(0);
+    setSelectedDay(null);
+    localStorage.removeItem('token');
+    setCurrentView('auth');
   };
 
   const handleAuth = async (e) => {
@@ -234,60 +288,6 @@ function App() {
       setAuthError(error.message);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    console.log('Logging out...');
-    setToken(null);
-    setUser(null);
-    setActiveFast(null);
-    setFastingHistory([]);
-    setFastingStats(null);
-    setElapsedTime(0);
-    setSelectedDay(null);
-    localStorage.removeItem('token');
-    setCurrentView('auth');
-  };
-
-  const fetchActiveFast = async () => {
-    try {
-      console.log('Fetching active fast...');
-      const fast = await apiCall('/fasting/active');
-      console.log('Active fast response:', fast);
-      setActiveFast(fast);
-    } catch (error) {
-      console.error('Error fetching active fast:', error);
-      if (error.message.includes('No active fasting session')) {
-        setActiveFast(null);
-      }
-    }
-  };
-
-  const fetchFastingHistory = async () => {
-    try {
-      console.log('Fetching fasting history...');
-      const history = await apiCall('/fasting/history');
-      console.log('History response:', history);
-      setFastingHistory(history);
-    } catch (error) {
-      console.error('Error fetching history:', error);
-    }
-  };
-
-  const fetchFastingStats = async () => {
-    try {
-      console.log('Fetching fasting stats...');
-      const stats = await apiCall('/fasting/stats');
-      console.log('Stats response:', stats);
-      setFastingStats(stats);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-      setFastingStats({
-        completedSessions: 0,
-        completionRate: 0,
-        totalHoursFasted: 0
-      });
     }
   };
 
