@@ -151,7 +151,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3001/api${endpoint}`, config);
+      const response = await fetch(`https://fastingapp-db-production.up.railway.app/api${endpoint}`, config);
       const data = await response.json();
 
       if (!response.ok) {
